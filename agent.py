@@ -15,6 +15,7 @@ def build_project_context() -> str:
     context_parts = []
 
     context_parts.append("PROJECT FILES:")
+
     if files:
         context_parts.append("\n".join(files))
     else:

@@ -1,6 +1,6 @@
 from agent import ask_agent
+from config import NVIDIA_MODEL, PROJECT_PATH
 from tools.file_reader import list_files
-from config import PROJECT_PATH, NVIDIA_MODEL
 
 
 def main():
@@ -13,6 +13,7 @@ def main():
     files = list_files()
 
     print("Files found:")
+
     if files:
         for file in files:
             print(f"- {file}")
@@ -20,7 +21,8 @@ def main():
         print("No files found.")
 
     print()
-    task = input("What do you want the agent to do?\n ")
+
+    task = input("What do you want the agent to do?\n> ")
 
     print()
     print("Thinking...")
@@ -35,3 +37,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    

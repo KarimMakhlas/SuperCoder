@@ -1,5 +1,7 @@
 from pathlib import Path
+
 from config import PROJECT_PATH
+
 
 ALLOWED_EXTENSIONS = {
     ".py",
@@ -37,7 +39,6 @@ def list_files() -> list[str]:
 def read_file(relative_path: str, max_chars: int = 6000) -> str:
     file_path = (PROJECT_PATH / relative_path).resolve()
 
-    # Security: prevent reading outside the project folder
     if not str(file_path).startswith(str(PROJECT_PATH)):
         raise ValueError("Security error: trying to read outside the project folder.")
 
