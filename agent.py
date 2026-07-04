@@ -27,21 +27,70 @@ def parse_agent_response(response_text: str) -> dict:
     """
     The model should return JSON.
 
-    Example:
-    {"action": "list_files", "args": {}}
-
-    Sometimes models add extra text by mistake.
-    For now, we keep it simple and expect valid JSON.
+    But sometimes it may return extra text before or after the JSON.
+    This function tries to extract the JSON object safely.
     """
+
+    response_text = response_text.strip()
 
     try:
         return json.loads(response_text)
+    except JSONDecodeError:
+        pass
+
+    start_index = response_text.find("{")
+    end_index = response_text.rfind("}")
+
+    if start_index == -1 or end_index == -1 or end_index <= start_index:
+        raise ValueError(
+            "The model did not return a JSON object.\n\n"
+            f"Model response was:\n{response_text}"
+        )
+
+    possible_json = response_text[start_index : end_index + 1]
+
+    try:
+        return json.loads(possible_json)
     except JSONDecodeError as error:
         raise ValueError(
-            f"The model did not return valid JSON.\n\n"
-            f"Model response was:\n{response_text}\n\n"
+            "The model returned invalid JSON.\n\n"
+            f"Extracted JSON was:\n{possible_json}\n\n"
+            f"Original response was:\n{response_text}\n\n"
             f"JSON error:\n{error}"
         )
+
+
+def validate_agent_action(parsed_response: dict) -> dict:
+    """
+    Validates that the model returned the expected structure.
+
+    Expected:
+    {
+        "action": "list_files",
+        "args": {}
+    }
+    """
+
+    allowed_actions = {
+        "list_files",
+        "read_file",
+        "search_code",
+        "final_answer",
+    }
+
+    action = parsed_response.get("action")
+    args = parsed_response.get("args")
+
+    if action not in allowed_actions:
+        raise ValueError(f"Invalid action from model: {action}")
+
+    if args is None:
+        parsed_response["args"] = {}
+
+    if not isinstance(parsed_response["args"], dict):
+        raise ValueError("Invalid args from model: args must be a dictionary.")
+
+    return parsed_response
 
 
 def build_initial_prompt(task: str) -> str:
@@ -92,6 +141,7 @@ def ask_agent(task: str) -> str:
         print()
 
         parsed_response = parse_agent_response(response_text)
+        parsed_response = validate_agent_action(parsed_response)
 
         action = parsed_response.get("action")
         args = parsed_response.get("args", {})

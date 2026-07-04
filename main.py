@@ -4,8 +4,8 @@ from tools.file_reader import list_files
 
 
 def main():
-    print("SuperCoder Local v1.1")
-    print("=====================")
+    print("SuperCoder")
+    print("==========")
     print(f"Project path: {PROJECT_PATH}")
     print(f"Model: {NVIDIA_MODEL}")
     print()
