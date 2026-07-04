@@ -4,8 +4,8 @@ from tools.file_reader import list_files
 
 
 def main():
-    print("SuperCoder Local v1")
-    print("===================")
+    print("SuperCoder Local v1.1")
+    print("=====================")
     print(f"Project path: {PROJECT_PATH}")
     print(f"Model: {NVIDIA_MODEL}")
     print()
@@ -25,16 +25,16 @@ def main():
     task = input("What do you want the agent to do?\n> ")
 
     print()
-    print("Thinking...")
+    print("Starting agent loop...")
     print()
 
     answer = ask_agent(task)
 
-    print("AGENT ANSWER")
+    print()
+    print("FINAL ANSWER")
     print("============")
     print(answer)
 
 
 if __name__ == "__main__":
     main()
-    
