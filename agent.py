@@ -108,6 +108,51 @@ def action_to_key(action: str, args: dict) -> str:
     return f"{action}:{json.dumps(args, sort_keys=True)}"
 
 
+def format_final_answer(args: dict) -> str:
+    """
+    Formats the final answer returned by the model.
+
+    The model can return either:
+    1. {"answer": "..."}
+    2. Structured fields like file, function, problem, etc.
+    """
+
+    if "answer" in args:
+        return args["answer"]
+
+    sections = []
+
+    file = args.get("file")
+    function = args.get("function")
+    problem = args.get("problem")
+    why_it_fails = args.get("why_it_fails")
+    impact = args.get("impact")
+    suggested_fix = args.get("suggested_fix")
+
+    if file:
+        sections.append(f"File: {file}")
+
+    if function:
+        sections.append(f"Function: {function}")
+
+    if problem:
+        sections.append(f"Problem: {problem}")
+
+    if why_it_fails:
+        sections.append(f"Why it fails: {why_it_fails}")
+
+    if impact:
+        sections.append(f"Impact: {impact}")
+
+    if suggested_fix:
+        sections.append(f"Suggested fix: {suggested_fix}")
+
+    if not sections:
+        return "The agent returned a final answer, but it did not include useful details."
+
+    return "\n".join(sections)
+
+
 def build_initial_prompt(task: str) -> str:
     system_prompt = load_system_prompt()
 
@@ -164,8 +209,8 @@ def ask_agent(task: str) -> str:
         args = parsed_response.get("args", {})
 
         if action == "final_answer":
-            return args.get("answer", "The agent returned an empty final answer.")
-
+            return format_final_answer(args)
+        
         action_key = action_to_key(action, args)
 
         if action_key in used_actions:
