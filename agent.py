@@ -93,6 +93,21 @@ def validate_agent_action(parsed_response: dict) -> dict:
     return parsed_response
 
 
+def action_to_key(action: str, args: dict) -> str:
+    """
+    Converts an action + args into a stable string.
+
+    Example:
+    action = "read_file"
+    args = {"path": "calculator.py"}
+
+    Result:
+    read_file:{"path": "calculator.py"}
+    """
+
+    return f"{action}:{json.dumps(args, sort_keys=True)}"
+
+
 def build_initial_prompt(task: str) -> str:
     system_prompt = load_system_prompt()
 
@@ -130,6 +145,8 @@ def ask_agent(task: str) -> str:
     model = create_model()
     prompt = build_initial_prompt(task)
 
+    used_actions = set()
+
     for step in range(1, MAX_STEPS + 1):
         print(f"[agent step {step}] Asking model...")
 
@@ -149,7 +166,23 @@ def ask_agent(task: str) -> str:
         if action == "final_answer":
             return args.get("answer", "The agent returned an empty final answer.")
 
-        tool_result = run_tool(action, args)
+        action_key = action_to_key(action, args)
+
+        if action_key in used_actions:
+            tool_result = json.dumps(
+                {
+                    "success": False,
+                    "error": (
+                        "You already used this exact action before. "
+                        "Do not repeat the same tool call. Choose a different action "
+                        "or provide a final_answer if you have enough information."
+                    ),
+                },
+                indent=2,
+            )
+        else:
+            used_actions.add(action_key)
+            tool_result = run_tool(action, args)
 
         print(f"[agent step {step}] Tool result:")
         print(tool_result)
