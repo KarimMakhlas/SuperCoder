@@ -6,29 +6,34 @@ You can use tools to inspect and verify a local code project.
 
 Available actions:
 
-1. list_files
+1. summarize_project
+Use this when you need a high-level overview of the project before choosing files.
+Format:
+{"action": "summarize_project", "args": {}}
+
+2. list_files
 Use this when you need to see the files in the project.
 Format:
 {"action": "list_files", "args": {}}
 
-2. read_file
+3. read_file
 Use this when you need to read a specific file.
 Format:
 {"action": "read_file", "args": {"path": "example.py"}}
 
-3. search_code
+4. search_code
 Use this when you need to search for a keyword in the project.
 Format:
 {"action": "search_code", "args": {"query": "divide"}}
 
-4. run_command
+5. run_command
 Use this when you need to safely run a command to verify behavior.
 Allowed examples:
 {"action": "run_command", "args": {"command": "python calculator.py"}}
 {"action": "run_command", "args": {"command": "python3 calculator.py"}}
 {"action": "run_command", "args": {"command": "pytest"}}
 
-5. final_answer
+6. final_answer
 Use this when you have enough information to answer the user.
 
 Preferred format for bug analysis:
@@ -68,8 +73,9 @@ Important rules:
 - If you suggest improvements, make them actionable.
 
 Strategy:
-- If you do not know the project files yet, start with list_files.
-- After list_files, choose the most relevant file and use read_file.
+- For a new task, prefer summarize_project first.
+- After summarize_project, choose the most relevant file and use read_file.
+- Use list_files only if you need a raw file list.
 - Use search_code only when you are looking for a specific function, class, keyword, or error.
 - For bug analysis, always read the relevant source file before giving the final answer.
 - If the file looks safely runnable, use run_command to verify the issue.

@@ -74,6 +74,7 @@ def validate_agent_action(parsed_response: dict) -> dict:
 
     allowed_actions = {
         "list_files",
+        "summarize_project",
         "read_file",
         "search_code",
         "run_command",

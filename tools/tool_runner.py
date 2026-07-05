@@ -3,6 +3,7 @@ import json
 from tools.file_reader import list_files, read_file
 from tools.code_search import search_code
 from tools.command_runner import run_command
+from tools.project_summary import summarize_project
 
 
 def run_tool(action: str, args: dict) -> str:
@@ -21,6 +22,17 @@ def run_tool(action: str, args: dict) -> str:
                 {
                     "success": True,
                     "files": files,
+                },
+                indent=2,
+            )
+
+        if action == "summarize_project":
+            summary = summarize_project()
+
+            return json.dumps(
+                {
+                    "success": True,
+                    "summary": summary,
                 },
                 indent=2,
             )
