@@ -24,6 +24,70 @@ def create_model() -> ChatNVIDIA:
     )
 
 
+def classify_task(task: str) -> str:
+    """
+    Classifies the user task into a simple task type.
+
+    For now, this is keyword-based.
+    Later, we can make it model-based.
+    """
+
+    task_lower = task.lower()
+
+    bug_keywords = [
+        "bug",
+        "error",
+        "issue",
+        "crash",
+        "fail",
+        "failing",
+        "exception",
+        "traceback",
+        "fix",
+        "broken",
+    ]
+
+    review_keywords = [
+        "review",
+        "quality",
+        "improve",
+        "clean",
+        "refactor",
+        "best practice",
+        "maintainability",
+    ]
+
+    explanation_keywords = [
+        "explain",
+        "understand",
+        "what does",
+        "how does",
+        "describe",
+    ]
+
+    summary_keywords = [
+        "summary",
+        "summarize",
+        "structure",
+        "architecture",
+        "overview",
+    ]
+
+    if any(keyword in task_lower for keyword in bug_keywords):
+        return "bug_analysis"
+
+    if any(keyword in task_lower for keyword in review_keywords):
+        return "code_review"
+
+    if any(keyword in task_lower for keyword in explanation_keywords):
+        return "code_explanation"
+
+    if any(keyword in task_lower for keyword in summary_keywords):
+        return "project_summary"
+
+    return "general"
+
+
 def parse_agent_response(response_text: str) -> dict:
     """
     The model should return JSON.
@@ -199,7 +263,7 @@ def format_final_answer(args: dict) -> str:
     return "\n".join(sections)
 
 
-def build_initial_prompt(task: str) -> str:
+def build_initial_prompt(task: str, task_type: str) -> str:
     system_prompt = load_system_prompt()
 
     return f"""
@@ -207,6 +271,11 @@ def build_initial_prompt(task: str) -> str:
 
 USER TASK:
 {task}
+
+TASK TYPE:
+{task_type}
+
+Use the task type to choose the best strategy and final answer format.
 
 Start by choosing the best action.
 Remember: respond with exactly one JSON object.
@@ -234,10 +303,15 @@ Remember: respond with exactly one JSON object.
 
 def ask_agent(task: str) -> str:
     model = create_model()
-    prompt = build_initial_prompt(task)
+    task_type = classify_task(task)
+    prompt = build_initial_prompt(task, task_type)
+
+    print(f"[classifier] Task type: {task_type}")
+    print()
 
     used_actions = set()
     run_log = create_run_log(task)
+    run_log["task_type"] = task_type
 
     for step in range(1, MAX_STEPS + 1):
         print(f"[agent step {step}] Asking model...")
