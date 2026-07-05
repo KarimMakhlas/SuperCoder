@@ -5,6 +5,7 @@ from langchain_nvidia_ai_endpoints import ChatNVIDIA
 
 from config import NVIDIA_MODEL
 from tools.tool_runner import run_tool
+from run_logger import create_run_log, add_step, finish_run_log, save_run_log
 
 
 MAX_STEPS = 8
@@ -182,6 +183,7 @@ def ask_agent(task: str) -> str:
     prompt = build_initial_prompt(task)
 
     used_actions = set()
+    run_log = create_run_log(task)
 
     for step in range(1, MAX_STEPS + 1):
         print(f"[agent step {step}] Asking model...")
@@ -200,8 +202,24 @@ def ask_agent(task: str) -> str:
         args = parsed_response.get("args", {})
 
         if action == "final_answer":
-            return format_final_answer(args)
-        
+            final_answer = format_final_answer(args)
+
+            add_step(
+                run_log=run_log,
+                step_number=step,
+                model_response=response_text,
+                action=action,
+                args=args,
+                tool_result=None,
+            )
+
+            finish_run_log(run_log, final_answer)
+            log_path = save_run_log(run_log)
+
+            print(f"[log] Run saved to: {log_path}")
+
+            return final_answer
+
         action_key = action_to_key(action, args)
 
         if action_key in used_actions:
@@ -220,6 +238,15 @@ def ask_agent(task: str) -> str:
             used_actions.add(action_key)
             tool_result = run_tool(action, args)
 
+        add_step(
+            run_log=run_log,
+            step_number=step,
+            model_response=response_text,
+            action=action,
+            args=args,
+            tool_result=tool_result,
+        )
+
         print(f"[agent step {step}] Tool result:")
         print(tool_result)
         print()
@@ -230,7 +257,14 @@ def ask_agent(task: str) -> str:
             tool_result=tool_result,
         )
 
-    return (
+    final_answer = (
         "The agent reached the maximum number of steps without a final answer. "
         "Try asking a smaller or more precise task."
     )
+
+    finish_run_log(run_log, final_answer)
+    log_path = save_run_log(run_log)
+
+    print(f"[log] Run saved to: {log_path}")
+
+    return final_answer
