@@ -1,5 +1,6 @@
 import json
 from json import JSONDecodeError
+from pathlib import Path
 
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
 
@@ -10,10 +11,13 @@ from run_logger import create_run_log, add_step, finish_run_log, save_run_log
 
 MAX_STEPS = 8
 
+SYSTEM_PROMPT_PATH = Path(__file__).resolve().parent / "prompts" / "system_prompt.txt"
+
+MODIFYING_ACTIONS = {"edit_file", "write_file"}
+
 
 def load_system_prompt() -> str:
-    with open("prompts/system_prompt.txt", "r", encoding="utf-8") as file:
-        return file.read()
+    return SYSTEM_PROMPT_PATH.read_text(encoding="utf-8")
 
 
 def create_model() -> ChatNVIDIA:
@@ -28,11 +32,28 @@ def classify_task(task: str) -> str:
     """
     Classifies the user task into a simple task type.
 
-    For now, this is keyword-based.
-    Later, we can make it model-based.
+    Important:
+    Modification intent must be checked before bug analysis.
+    Example:
+    "Fix the division by zero bug" should be code_modification,
+    not only bug_analysis.
     """
 
     task_lower = task.lower()
+
+    modification_keywords = [
+        "fix",
+        "update",
+        "modify",
+        "change",
+        "implement",
+        "add",
+        "remove",
+        "refactor",
+        "rewrite",
+        "improve the code",
+        "make it",
+    ]
 
     bug_keywords = [
         "bug",
@@ -43,16 +64,13 @@ def classify_task(task: str) -> str:
         "failing",
         "exception",
         "traceback",
-        "fix",
         "broken",
     ]
 
     review_keywords = [
         "review",
         "quality",
-        "improve",
         "clean",
-        "refactor",
         "best practice",
         "maintainability",
     ]
@@ -73,6 +91,9 @@ def classify_task(task: str) -> str:
         "overview",
     ]
 
+    if any(keyword in task_lower for keyword in modification_keywords):
+        return "code_modification"
+
     if any(keyword in task_lower for keyword in bug_keywords):
         return "bug_analysis"
 
@@ -90,39 +111,44 @@ def classify_task(task: str) -> str:
 
 def parse_agent_response(response_text: str) -> dict:
     """
-    The model should return JSON.
+    Extracts the first valid JSON object returned by the model.
 
-    But sometimes it may return extra text before or after the JSON.
-    This function tries to extract the JSON object safely.
+    Why this is needed:
+    Sometimes the model returns extra explanations, markdown code fences,
+    or multiple JSON examples. We only want the first valid action object.
     """
 
     response_text = response_text.strip()
 
+    # First try: maybe the whole response is already valid JSON.
     try:
-        return json.loads(response_text)
+        parsed = json.loads(response_text)
+
+        if isinstance(parsed, dict) and "action" in parsed:
+            return parsed
     except JSONDecodeError:
         pass
 
-    start_index = response_text.find("{")
-    end_index = response_text.rfind("}")
+    decoder = json.JSONDecoder()
 
-    if start_index == -1 or end_index == -1 or end_index <= start_index:
-        raise ValueError(
-            "The model did not return a JSON object.\n\n"
-            f"Model response was:\n{response_text}"
-        )
+    # Try to decode JSON starting from every "{" in the response.
+    for index, char in enumerate(response_text):
+        if char != "{":
+            continue
 
-    possible_json = response_text[start_index : end_index + 1]
+        try:
+            parsed, _ = decoder.raw_decode(response_text[index:])
 
-    try:
-        return json.loads(possible_json)
-    except JSONDecodeError as error:
-        raise ValueError(
-            "The model returned invalid JSON.\n\n"
-            f"Extracted JSON was:\n{possible_json}\n\n"
-            f"Original response was:\n{response_text}\n\n"
-            f"JSON error:\n{error}"
-        )
+            if isinstance(parsed, dict) and "action" in parsed:
+                return parsed
+
+        except JSONDecodeError:
+            continue
+
+    raise ValueError(
+        "The model did not return a valid JSON action object.\n\n"
+        f"Model response was:\n{response_text}"
+    )
 
 
 def validate_agent_action(parsed_response: dict) -> dict:
@@ -142,6 +168,8 @@ def validate_agent_action(parsed_response: dict) -> dict:
         "read_file",
         "search_code",
         "run_command",
+        "edit_file",
+        "write_file",
         "final_answer",
     }
 
@@ -180,18 +208,47 @@ def format_final_answer(args: dict) -> str:
     Formats the final answer returned by the model.
 
     Supported formats:
-    1. General answer:
-       {"answer": "..."}
-
-    2. Bug analysis:
-       file, function, problem, why_it_fails, impact, evidence, command_run, suggested_fix
-
-    3. Code review:
-       summary, strengths, issues, recommendations, next_steps
+    1. General answer
+    2. Bug analysis
+    3. Code review
+    4. Implementation summary
     """
 
     if "answer" in args:
         return args["answer"]
+
+    # Implementation summary format
+    if any(key in args for key in ["changed_files", "changes_made", "verification", "status"]):
+        sections = []
+
+        status = args.get("status")
+        changed_files = args.get("changed_files", [])
+        changes_made = args.get("changes_made", [])
+        verification = args.get("verification")
+        next_steps = args.get("next_steps", [])
+
+        if status:
+            sections.append(f"Status:\n{status}")
+
+        if changed_files:
+            sections.append("Changed files:")
+            for file in changed_files:
+                sections.append(f"- {file}")
+
+        if changes_made:
+            sections.append("Changes made:")
+            for change in changes_made:
+                sections.append(f"- {change}")
+
+        if verification:
+            sections.append(f"Verification:\n{verification}")
+
+        if next_steps:
+            sections.append("Next steps:")
+            for step in next_steps:
+                sections.append(f"- {step}")
+
+        return "\n".join(sections)
 
     # Code review format
     if any(key in args for key in ["summary", "strengths", "issues", "recommendations", "next_steps"]):
@@ -313,24 +370,99 @@ def ask_agent(task: str) -> str:
     run_log = create_run_log(task)
     run_log["task_type"] = task_type
 
-    for step in range(1, MAX_STEPS + 1):
-        print(f"[agent step {step}] Asking model...")
+    modification_attempted = False
 
-        response = model.invoke(prompt)
-        response_text = response.content.strip()
+    try:
+        for step in range(1, MAX_STEPS + 1):
+            print(f"[agent step {step}] Asking model...")
 
-        print(f"[agent step {step}] Model response:")
-        print(response_text)
-        print()
+            response = model.invoke(prompt)
+            response_text = response.content.strip()
 
-        parsed_response = parse_agent_response(response_text)
-        parsed_response = validate_agent_action(parsed_response)
+            print(f"[agent step {step}] Model response:")
+            print(response_text)
+            print()
 
-        action = parsed_response.get("action")
-        args = parsed_response.get("args", {})
+            parsed_response = parse_agent_response(response_text)
+            parsed_response = validate_agent_action(parsed_response)
 
-        if action == "final_answer":
-            final_answer = format_final_answer(args)
+            action = parsed_response.get("action")
+            args = parsed_response.get("args", {})
+
+            final_answer_blocked = (
+                action == "final_answer"
+                and task_type == "code_modification"
+                and not modification_attempted
+            )
+
+            if action == "final_answer" and not final_answer_blocked:
+                final_answer = format_final_answer(args)
+
+                add_step(
+                    run_log=run_log,
+                    step_number=step,
+                    model_response=response_text,
+                    action=action,
+                    args=args,
+                    tool_result=None,
+                )
+
+                finish_run_log(run_log, final_answer)
+                log_path = save_run_log(run_log)
+
+                print(f"[log] Run saved to: {log_path}")
+
+                return final_answer
+
+            if final_answer_blocked:
+                tool_result = json.dumps(
+                    {
+                        "success": False,
+                        "error": (
+                            "This is a code_modification task. You must call "
+                            "edit_file or write_file (and have it either succeed "
+                            "or be explicitly rejected by the user) before giving "
+                            "a final_answer."
+                        ),
+                    },
+                    indent=2,
+                )
+            else:
+                repeat_protected_actions = {
+                    "list_files",
+                    "summarize_project",
+                    "read_file",
+                    "search_code",
+                }
+
+                action_key = action_to_key(action, args)
+
+                if action in repeat_protected_actions and action_key in used_actions:
+                    tool_result = json.dumps(
+                        {
+                            "success": False,
+                            "error": (
+                                "You already used this exact read-only action before. "
+                                "Do not repeat the same tool call. Choose a different action "
+                                "or provide a final_answer if you have enough information."
+                            ),
+                        },
+                        indent=2,
+                    )
+                else:
+                    if action in repeat_protected_actions:
+                        used_actions.add(action_key)
+
+                    tool_result = run_tool(action, args)
+
+            if action in MODIFYING_ACTIONS:
+                try:
+                    result_data = json.loads(tool_result)
+                except JSONDecodeError:
+                    result_data = {}
+
+                if result_data.get("success") or result_data.get("approved") is False:
+                    modification_attempted = True
 
             add_step(
                 run_log=run_log,
@@ -338,61 +470,35 @@ def ask_agent(task: str) -> str:
                 model_response=response_text,
                 action=action,
                 args=args,
-                tool_result=None,
+                tool_result=tool_result,
             )
 
-            finish_run_log(run_log, final_answer)
-            log_path = save_run_log(run_log)
+            print(f"[agent step {step}] Tool result:")
+            print(tool_result)
+            print()
 
-            print(f"[log] Run saved to: {log_path}")
-
-            return final_answer
-
-        action_key = action_to_key(action, args)
-
-        if action_key in used_actions:
-            tool_result = json.dumps(
-                {
-                    "success": False,
-                    "error": (
-                        "You already used this exact action before. "
-                        "Do not repeat the same tool call. Choose a different action "
-                        "or provide a final_answer if you have enough information."
-                    ),
-                },
-                indent=2,
+            prompt = build_next_prompt(
+                previous_prompt=prompt,
+                agent_response=response_text,
+                tool_result=tool_result,
             )
-        else:
-            used_actions.add(action_key)
-            tool_result = run_tool(action, args)
 
-        add_step(
-            run_log=run_log,
-            step_number=step,
-            model_response=response_text,
-            action=action,
-            args=args,
-            tool_result=tool_result,
+        final_answer = (
+            "The agent reached the maximum number of steps without a final answer. "
+            "Try asking a smaller or more precise task."
         )
 
-        print(f"[agent step {step}] Tool result:")
-        print(tool_result)
-        print()
+        finish_run_log(run_log, final_answer)
+        log_path = save_run_log(run_log)
 
-        prompt = build_next_prompt(
-            previous_prompt=prompt,
-            agent_response=response_text,
-            tool_result=tool_result,
-        )
+        print(f"[log] Run saved to: {log_path}")
 
-    final_answer = (
-        "The agent reached the maximum number of steps without a final answer. "
-        "Try asking a smaller or more precise task."
-    )
+        return final_answer
 
-    finish_run_log(run_log, final_answer)
-    log_path = save_run_log(run_log)
+    except Exception as error:
+        finish_run_log(run_log, f"Agent run failed with an error: {error}")
+        log_path = save_run_log(run_log)
 
-    print(f"[log] Run saved to: {log_path}")
+        print(f"[log] Run saved to: {log_path}")
 
-    return final_answer
+        raise

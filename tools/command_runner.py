@@ -81,7 +81,7 @@ def run_command(command: str, timeout: int = 10) -> dict:
         )
 
         return {
-            "success": True,
+            "success": result.returncode == 0,
             "command": command,
             "return_code": result.returncode,
             "stdout": result.stdout,

@@ -3,7 +3,7 @@ from datetime import datetime
 from pathlib import Path
 
 
-LOG_DIR = Path("logs/runs")
+LOG_DIR = Path(__file__).resolve().parent / "logs" / "runs"
 
 
 def create_run_log(task: str) -> dict:
@@ -59,7 +59,7 @@ def save_run_log(run_log: dict) -> str:
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S_%f")
     file_path = LOG_DIR / f"run_{timestamp}.json"
 
     file_path.write_text(
