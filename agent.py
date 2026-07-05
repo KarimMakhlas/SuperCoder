@@ -115,14 +115,67 @@ def format_final_answer(args: dict) -> str:
     """
     Formats the final answer returned by the model.
 
-    The model can return either:
-    1. {"answer": "..."}
-    2. Structured fields like file, function, problem, etc.
+    Supported formats:
+    1. General answer:
+       {"answer": "..."}
+
+    2. Bug analysis:
+       file, function, problem, why_it_fails, impact, evidence, command_run, suggested_fix
+
+    3. Code review:
+       summary, strengths, issues, recommendations, next_steps
     """
 
     if "answer" in args:
         return args["answer"]
 
+    # Code review format
+    if any(key in args for key in ["summary", "strengths", "issues", "recommendations", "next_steps"]):
+        sections = []
+
+        summary = args.get("summary")
+        strengths = args.get("strengths", [])
+        issues = args.get("issues", [])
+        recommendations = args.get("recommendations", [])
+        next_steps = args.get("next_steps", [])
+
+        if summary:
+            sections.append(f"Summary:\n{summary}")
+
+        if strengths:
+            sections.append("Strengths:")
+            for strength in strengths:
+                sections.append(f"- {strength}")
+
+        if issues:
+            sections.append("Issues:")
+            for issue in issues:
+                if isinstance(issue, dict):
+                    file = issue.get("file", "Unknown file")
+                    severity = issue.get("severity", "medium")
+                    description = issue.get("description", "")
+                    recommendation = issue.get("recommendation", "")
+
+                    sections.append(f"- [{severity}] {file}: {description}")
+
+                    if recommendation:
+                        sections.append(f"  Recommendation: {recommendation}")
+                else:
+                    sections.append(f"- {issue}")
+
+        if recommendations:
+            sections.append("Recommendations:")
+            for recommendation in recommendations:
+                sections.append(f"- {recommendation}")
+
+        if next_steps:
+            sections.append("Next steps:")
+            for step in next_steps:
+                sections.append(f"- {step}")
+
+        return "\n".join(sections)
+
+    # Bug analysis format
     sections = []
 
     fields = [
