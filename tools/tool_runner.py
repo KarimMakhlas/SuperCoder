@@ -2,6 +2,7 @@ import json
 
 from tools.file_reader import list_files, read_file
 from tools.code_search import search_code
+from tools.command_runner import run_command
 
 
 def run_tool(action: str, args: dict) -> str:
@@ -68,6 +69,22 @@ def run_tool(action: str, args: dict) -> str:
                 indent=2,
             )
 
+        if action == "run_command":
+            command = args.get("command")
+
+            if not command:
+                return json.dumps(
+                    {
+                        "success": False,
+                        "error": "Missing argument: command",
+                    },
+                    indent=2,
+                )
+
+            result = run_command(command)
+
+            return json.dumps(result, indent=2)
+
         return json.dumps(
             {
                 "success": False,
@@ -83,4 +100,4 @@ def run_tool(action: str, args: dict) -> str:
                 "error": str(error),
             },
             indent=2,
-        ) 
+        )

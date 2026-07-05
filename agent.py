@@ -19,7 +19,7 @@ def create_model() -> ChatNVIDIA:
     return ChatNVIDIA(
         model=NVIDIA_MODEL,
         temperature=0.2,
-        max_completion_tokens=1200,
+        max_completion_tokens=1600,
     )
 
 
@@ -75,6 +75,7 @@ def validate_agent_action(parsed_response: dict) -> dict:
         "list_files",
         "read_file",
         "search_code",
+        "run_command",
         "final_answer",
     }
 
@@ -122,30 +123,20 @@ def format_final_answer(args: dict) -> str:
 
     sections = []
 
-    file = args.get("file")
-    function = args.get("function")
-    problem = args.get("problem")
-    why_it_fails = args.get("why_it_fails")
-    impact = args.get("impact")
-    suggested_fix = args.get("suggested_fix")
+    fields = [
+        ("File", args.get("file")),
+        ("Function", args.get("function")),
+        ("Problem", args.get("problem")),
+        ("Why it fails", args.get("why_it_fails")),
+        ("Impact", args.get("impact")),
+        ("Evidence", args.get("evidence")),
+        ("Command run", args.get("command_run")),
+        ("Suggested fix", args.get("suggested_fix")),
+    ]
 
-    if file:
-        sections.append(f"File: {file}")
-
-    if function:
-        sections.append(f"Function: {function}")
-
-    if problem:
-        sections.append(f"Problem: {problem}")
-
-    if why_it_fails:
-        sections.append(f"Why it fails: {why_it_fails}")
-
-    if impact:
-        sections.append(f"Impact: {impact}")
-
-    if suggested_fix:
-        sections.append(f"Suggested fix: {suggested_fix}")
+    for label, value in fields:
+        if value:
+            sections.append(f"{label}: {value}")
 
     if not sections:
         return "The agent returned a final answer, but it did not include useful details."
